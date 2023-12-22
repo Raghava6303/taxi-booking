@@ -1,19 +1,44 @@
-pipeline{
+pipeline {
     agent any
-    stages{
-        stage('checkout'){
-            steps{
-                checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/Venna12/taxi-booking.git']])
-            }
-        }
+    
+    tools {
+        maven 'maven3'
+    }
+    parameters {
+         string(name: 'tomcat_stag', defaultValue: '3.86.165.49', description: 'Node1-Remote Staging Server')
+         string(name: 'tomcat_prod', defaultValue: '18.234.204.107 ', description: 'Node2-Remote Production Server')
+    }
+
+    triggers {
+         pollSCM('* * * * *')
+     }
+
+stages{
         stage('Build'){
-            steps{
-                sh "mvn package"
+            steps {
+                sh 'mvn clean package'
+            }
+            post {
+                success {
+                    echo 'Archiving the artifacts'
+                    archiveArtifacts artifacts: '*/target/.war'
+                }
             }
         }
-        stage('Deploy to tomcat'){
-            steps{
-                deploy adapters: [tomcat9(credentialsId: '527db3ea-545b-436b-bcbd-3c786d08d357', path: '', url: 'http://3.137.216.135:8080/')], contextPath: 'goutham', war: '**/*.war'
+
+        stage ('Deployments'){
+            parallel{
+                stage ('Deploy to Staging'){
+                    steps {
+                        sh "scp */.war jenkins@${params.tomcat_stag}:/usr/share/apache-tomcat-9.0.84/webapps"
+                    }
+                }
+
+                stage ("Deploy to Production"){
+                    steps {
+                        sh "scp */.war jenkins@${params.tomcat_prod}:/usr/share/apache-tomcat-9.0.84/webapps"
+                    }
+                }
             }
         }
     }
